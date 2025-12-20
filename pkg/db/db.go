@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 )
 
 type node struct {
@@ -25,8 +26,6 @@ func (n *node) clone() *node {
 	}
 }
 
-type idToNode map[uint64]*node
-
 type ReadOp struct {
 	Entry string
 	Keys  []string
@@ -34,22 +33,9 @@ type ReadOp struct {
 
 type ReadOpResult struct {
 	Entry      string
+	Exists     bool
 	KeyToValue map[string]string
 }
-
-type ReadBatch struct {
-	Ops []ReadOp
-}
-
-type ReadBatchResult struct {
-	OpResults []ReadOpResult
-}
-
-type WriteBatch struct {
-	Ops []WriteOp
-}
-
-type WriteOpType string
 
 type WriteOp struct {
 	Entry  string
@@ -72,9 +58,105 @@ type WriteActionUpdate struct {
 }
 
 type TreeDB struct {
-	log      *slog.Logger
-	nextId   uint64
-	idToNode idToNode
+	log                       *slog.Logger
+	nextId                    uint64
+	idToNode                  map[uint64]*node
+	notifierToCh              map[string]chan<- ReadOpResult
+	entryToNotifiers          map[string]map[string]struct{}
+	maxBufferSizeOfNotifierCh uint32
+	txTimeoutOfNotifierCh     time.Duration
+}
+
+var errNotifierAlreadyExists = errors.New("notifier already exists")
+var errNotifierFormatInvalid = errors.New("notifier format invalid")
+
+func (db *TreeDB) validateNotifier(notifier string) bool {
+	return validateStrOnlyContainWords(notifier)
+}
+
+func (db *TreeDB) RegisterNotifier(notifier string, entries []string) (ch <-chan ReadOpResult, err error) {
+	db.log.Info("RegisterNotifier")
+	db.log.Debug("RegisterNotifier args", slog.String("notifier", notifier), slog.Any("entries", entries))
+
+	if len(entries) == 0 || !db.validateNotifier(notifier) {
+		err = errNotifierFormatInvalid
+		db.log.Error("RegisterNotifier failed", slog.String("err", err.Error()))
+		return
+	}
+
+	for _, entry := range entries {
+		if !db.validateEntry(entry) {
+			err = errEntryFormatInvalid
+			db.log.Error("RegisterNotifier failed", slog.String("err", err.Error()))
+			return
+		}
+	}
+
+	if _, ok := db.notifierToCh[notifier]; ok {
+		err = errNotifierAlreadyExists
+		db.log.Error("RegisterNotifier failed", slog.String("err", err.Error()))
+		return
+	}
+
+	newCh := make(chan ReadOpResult, db.maxBufferSizeOfNotifierCh)
+
+	db.notifierToCh[notifier] = newCh
+	ch = newCh
+
+	ops := make([]ReadOp, 0, len(entries))
+
+	for _, entry := range entries {
+		if _, ok := db.entryToNotifiers[entry]; !ok {
+			db.entryToNotifiers[entry] = map[string]struct{}{}
+		}
+
+		notifiers := db.entryToNotifiers[entry]
+
+		if _, ok := notifiers[notifier]; ok {
+			panic(fmt.Sprintf("notifier should not exist, notifier: %s, db broken", notifier))
+		}
+		notifiers[notifier] = struct{}{}
+
+		ops = append(ops, ReadOp{Entry: entry, Keys: nil})
+	}
+
+	db.readBatchAndNotify(ops)
+
+	db.log.Info("RegisterNotifier done")
+
+	return
+}
+
+func (db *TreeDB) UnregisterNotifier(notifier string) (err error) {
+	db.log.Info("UnregisterNotifier")
+	db.log.Debug("UnregisterNotifier args", slog.String("notifier", notifier))
+
+	if !db.validateNotifier(notifier) {
+		err = errNotifierFormatInvalid
+		db.log.Error("UnregisterNotifier failed", slog.String("err", err.Error()))
+		return
+	}
+
+	entriesToBeRemoved := []string{}
+	for entry, notifiers := range db.entryToNotifiers {
+		delete(notifiers, notifier)
+		if len(notifiers) == 0 {
+			entriesToBeRemoved = append(entriesToBeRemoved, entry)
+		}
+	}
+
+	for _, entry := range entriesToBeRemoved {
+		delete(db.entryToNotifiers, entry)
+	}
+
+	if ch, ok := db.notifierToCh[notifier]; ok {
+		close(ch)
+	}
+	delete(db.notifierToCh, notifier)
+
+	db.log.Info("UnregisterNotifier done")
+
+	return
 }
 
 func (db *TreeDB) rootNode() *node {
@@ -153,55 +235,52 @@ func (db *TreeDB) newNode(name string) *node {
 }
 
 var errEntryNotExists = errors.New("entry not exists in db")
-var errKeyNotExists = errors.New("key not exists in entry")
 
-func (db *TreeDB) ReadBatch(batch ReadBatch) (result ReadBatchResult, err error) {
+func (db *TreeDB) ReadBatch(ops ...ReadOp) (results []ReadOpResult, err error) {
 	db.log.Info("ReadBatch")
-	defer db.log.Info("ReadBatch done")
+	db.log.Debug("ReadBatch args", slog.Any("ops", ops))
 
-	for _, op := range batch.Ops {
+	for _, op := range ops {
 		if !db.validateEntry(op.Entry) {
-			return result, errEntryFormatInvalid
+			err = errEntryFormatInvalid
+			slog.Error("ReadBatch failed", slog.String("err", err.Error()))
+			return
 		}
 	}
 
-	result.OpResults = make([]ReadOpResult, 0, len(batch.Ops))
+	results = make([]ReadOpResult, 0, len(ops))
 
-	for _, op := range batch.Ops {
+	for _, op := range ops {
 		db.log.Debug("ReadOp", slog.Any("op", op))
-
-		_node := db.findNode(op.Entry)
-		if _node == nil {
-			err = errEntryNotExists
-			db.log.Error("error occured", slog.String("err", err.Error()), slog.String("entry", op.Entry))
-			return
-		}
 
 		opResult := ReadOpResult{
 			Entry:      op.Entry,
+			Exists:     false,
 			KeyToValue: map[string]string{},
 		}
 
-		if len(op.Keys) > 0 {
-			for _, key := range op.Keys {
-				value, ok := _node.keyToValue[key]
-				if !ok {
-					err = errKeyNotExists
-					db.log.Error("error occured", slog.String("err", err.Error()), slog.String("key", key))
-					return
+		if _node := db.findNode(op.Entry); _node != nil {
+			opResult.Exists = true
+
+			if len(op.Keys) > 0 {
+				for _, key := range op.Keys {
+					if value, ok := _node.keyToValue[key]; ok {
+						opResult.KeyToValue[key] = value
+					}
 				}
-				opResult.KeyToValue[key] = value
+			} else {
+				opResult.KeyToValue = maps.Clone(_node.keyToValue)
 			}
-		} else {
-			opResult.KeyToValue = maps.Clone(_node.keyToValue)
 		}
 
-		result.OpResults = append(result.OpResults, opResult)
+		results = append(results, opResult)
 
 		db.log.Debug("ReadOp done")
 	}
 
-	return result, nil
+	db.log.Info("ReadBatch done")
+
+	return
 }
 
 type backupNodeWithNames struct {
@@ -209,11 +288,11 @@ type backupNodeWithNames struct {
 	node  *node
 }
 
-func (db *TreeDB) buildBackupNodesWithNames(batch WriteBatch) (backupNodesWithNames []backupNodeWithNames) {
-	db.log.Debug("buildBackupNodesWithNames", slog.Any("batch", batch))
+func (db *TreeDB) buildBackupNodesWithNames(ops []WriteOp) (backupNodesWithNames []backupNodeWithNames) {
+	db.log.Debug("buildBackupNodesWithNames", slog.Any("ops", ops))
 
 	backupEntryToNode := map[string]*node{}
-	for _, op := range batch.Ops {
+	for _, op := range ops {
 		entry := op.Entry
 		_node := db.findNode(entry)
 		if _node == nil {
@@ -225,7 +304,7 @@ func (db *TreeDB) buildBackupNodesWithNames(batch WriteBatch) (backupNodesWithNa
 
 		// backup child nodes
 		if op.Delete != nil {
-			childEntry := fmt.Sprintf("%s/%s", op.Entry, op.Delete.Name)
+			childEntry := db.concatEntryAndName(op.Entry, op.Delete.Name)
 			childNodeId, ok := _node.nameToIds[op.Delete.Name]
 			if !ok {
 				continue
@@ -254,8 +333,6 @@ func (db *TreeDB) buildBackupNodesWithNames(batch WriteBatch) (backupNodesWithNa
 	return
 }
 
-var errWriteActionNotSupported = errors.New("write action not supported")
-
 var errEntryAlreadyExists = errors.New("entry already exists in db")
 
 var errIdAlreadyExists = errors.New("node id already exists")
@@ -267,7 +344,7 @@ var errEntryFormatInvalid = errors.New("entry format invalid")
 
 var errNameFormatInvalid = errors.New("name format invalid")
 
-func (db *TreeDB) validateName(name string) bool {
+func validateStrOnlyContainWords(s string) bool {
 	validateChar := func(ch rune) bool {
 		return ('a' <= ch && ch <= 'z') ||
 			('A' <= ch && ch <= 'Z') ||
@@ -276,7 +353,7 @@ func (db *TreeDB) validateName(name string) bool {
 			ch == '-'
 	}
 
-	for _, ch := range name {
+	for _, ch := range s {
 		if !validateChar(ch) {
 			return false
 		}
@@ -285,11 +362,84 @@ func (db *TreeDB) validateName(name string) bool {
 	return true
 }
 
-func (db *TreeDB) WriteBatch(batch WriteBatch) (err error) {
-	db.log.Info("WriteBatch")
-	defer db.log.Info("WriteBatch done")
+func (db *TreeDB) Close() {
+	db.log.Info("Close")
+	defer db.log.Info("Close done")
 
-	for _, op := range batch.Ops {
+	db.entryToNotifiers = nil
+	for _, ch := range db.notifierToCh {
+		close(ch)
+	}
+	db.notifierToCh = nil
+}
+
+func (db *TreeDB) validateName(name string) bool {
+	return validateStrOnlyContainWords(name)
+}
+
+func (db *TreeDB) concatEntryAndName(entry, name string) string {
+	if !db.validateEntry(entry) || !db.validateName(name) {
+		panic(fmt.Sprintf("entry: %s or name: %s not valid", entry, name))
+	}
+
+	if entry == "/" {
+		return entry + name
+	} else {
+		return fmt.Sprintf("%s/%s", entry, name)
+	}
+}
+
+func (db *TreeDB) readBatchAndNotify(ops []ReadOp) {
+	results, err := db.ReadBatch(ops...)
+	if err != nil {
+		db.log.Error("do ReadBatch failed after WriteOps done", slog.String("err", err.Error()))
+		return
+	}
+
+	for _, result := range results {
+		for notifier := range db.entryToNotifiers[result.Entry] {
+			ch := db.notifierToCh[notifier]
+			select {
+			case ch <- result:
+			case <-time.After(db.txTimeoutOfNotifierCh):
+				db.log.Error(
+					"channel write failed, maybe full?",
+					slog.String("notifier", notifier),
+					slog.Any("txTimeoutOfNotifierCh", db.txTimeoutOfNotifierCh),
+				)
+			}
+		}
+	}
+}
+
+func (db *TreeDB) buildReadOpsReadBatchAndNotify(writeOps []WriteOp) {
+	entries := map[string]struct{}{}
+	readOps := []ReadOp{}
+
+	for _, op := range writeOps {
+		var entry string
+		if op.Create != nil {
+			entry = db.concatEntryAndName(op.Entry, op.Create.Name)
+		} else if op.Delete != nil {
+			entry = db.concatEntryAndName(op.Entry, op.Delete.Name)
+		} else if op.Update != nil {
+			entry = op.Entry
+		}
+
+		if _, ok := entries[entry]; !ok {
+			readOps = append(readOps, ReadOp{Entry: entry, Keys: nil})
+			entries[entry] = struct{}{}
+		}
+	}
+
+	db.readBatchAndNotify(readOps)
+}
+
+func (db *TreeDB) WriteBatch(ops ...WriteOp) (err error) {
+	db.log.Info("WriteBatch")
+	db.log.Debug("WriteBatch args", slog.Any("ops", ops))
+
+	for _, op := range ops {
 		if !db.validateEntry(op.Entry) {
 			err = errEntryFormatInvalid
 			break
@@ -309,14 +459,14 @@ func (db *TreeDB) WriteBatch(batch WriteBatch) (err error) {
 	}
 
 	if err != nil {
-		slog.Error("", slog.String("err", err.Error()))
+		db.log.Error("WriteBatch failed", slog.String("err", err.Error()))
 		return
 	}
 
-	backupNodesWithNames := db.buildBackupNodesWithNames(batch)
+	backupNodesWithNames := db.buildBackupNodesWithNames(ops)
 	newAddedNodeIds := []uint64{}
 
-	for _, op := range batch.Ops {
+	for _, op := range ops {
 		db.log.Debug("WriteOp", slog.Any("op.Entry", op.Entry))
 
 		_node := db.findNode(op.Entry)
@@ -328,7 +478,7 @@ func (db *TreeDB) WriteBatch(batch WriteBatch) (err error) {
 
 		if _node == nil {
 			err = errEntryNotExists
-			db.log.Error("error occured", slog.String("err", err.Error()), slog.String("entry", op.Entry))
+			db.log.Error("WriteBatch failed", slog.String("err", err.Error()), slog.String("entry", op.Entry))
 			goto REVERT_POINT
 		}
 		db.log.Debug("findNode done", slog.Any("_node", *_node))
@@ -362,14 +512,14 @@ func (db *TreeDB) WriteBatch(batch WriteBatch) (err error) {
 
 			if _, ok := _node.nameToIds[op.Delete.Name]; !ok {
 				err = errEntryNotExists
-				db.log.Error("error occured", slog.String("err", err.Error()))
+				db.log.Error("WriteBatch failed", slog.String("err", err.Error()))
 				goto REVERT_POINT
 			}
 
 			delNodeId = _node.nameToIds[op.Delete.Name]
 			if _, ok := db.idToNode[delNodeId]; !ok {
 				err = errIdNotExists
-				db.log.Error("error occured", slog.String("err", err.Error()))
+				db.log.Error("WriteBatch failed", slog.String("err", err.Error()))
 				goto REVERT_POINT
 			}
 
@@ -377,11 +527,12 @@ func (db *TreeDB) WriteBatch(batch WriteBatch) (err error) {
 
 			if len(delNode.nameToIds) > 0 {
 				err = errNotLeafNode
-				db.log.Error("error occured", slog.String("err", err.Error()))
+				db.log.Error("WriteBatch failed", slog.String("err", err.Error()))
 				goto REVERT_POINT
 			}
 
 			delete(db.idToNode, _node.nameToIds[op.Delete.Name])
+			delete(_node.nameToIds, op.Delete.Name)
 		} else if op.Update != nil {
 			db.log.Debug("", slog.Any("op.Update", *(op.Update)))
 
@@ -390,25 +541,26 @@ func (db *TreeDB) WriteBatch(batch WriteBatch) (err error) {
 			for _, k := range op.Update.DeleteKeys {
 				delete(_node.keyToValue, k)
 			}
-		} else {
-			err = errWriteActionNotSupported
-			db.log.Error("error occured", slog.String("err", err.Error()))
-			goto REVERT_POINT
 		}
 
 		db.log.Debug("WriteOp done")
 	}
 
+	db.buildReadOpsReadBatchAndNotify(ops)
+
+	db.log.Info("WriteBatch done")
+
 	return nil
 
 REVERT_POINT:
+	db.log.Info("WriteBatch revert")
 	db.log.Debug(
-		"WriteBatch revert",
+		"WriteBatch revert args",
 		slog.Any("backupNodesWithNames", backupNodesWithNames),
 		slog.Any("newAddedNodeIds", newAddedNodeIds),
 	)
 	for _, backupNodeWithNames := range backupNodesWithNames {
-		slog.Debug("", slog.Any("names", backupNodeWithNames.names), slog.Any("_node", *(backupNodeWithNames.node)))
+		db.log.Debug("", slog.Any("names", backupNodeWithNames.names), slog.Any("_node", *(backupNodeWithNames.node)))
 	}
 	for _, nodeWithNames := range backupNodesWithNames {
 		db.idToNode[nodeWithNames.node.id] = nodeWithNames.node
@@ -418,17 +570,25 @@ REVERT_POINT:
 		delete(db.idToNode, id)
 	}
 	for id, _node := range db.idToNode {
-		slog.Debug("", slog.Uint64("id", id), slog.Any("_node", *_node))
+		db.log.Debug("", slog.Uint64("id", id), slog.Any("_node", *_node))
 	}
+
 	db.log.Debug("WriteBatch revert done")
 
 	return err
 }
 
+const defaultMaxBufferSizeOfNotifierCh uint32 = 16
+const defaultTxTimeoutOfNotifierCh = time.Millisecond * 50
+
 func NewTreeDB() *TreeDB {
 	db := &TreeDB{
-		log:      slog.Default().With(slog.String("mod", "gotreedb")),
-		idToNode: idToNode{},
+		log:                       slog.Default().With(slog.String("mod", "gotreedb")),
+		idToNode:                  map[uint64]*node{},
+		notifierToCh:              map[string]chan<- ReadOpResult{},
+		entryToNotifiers:          map[string]map[string]struct{}{},
+		maxBufferSizeOfNotifierCh: defaultMaxBufferSizeOfNotifierCh,
+		txTimeoutOfNotifierCh:     defaultTxTimeoutOfNotifierCh,
 	}
 
 	rootNode := db.newNode("")
