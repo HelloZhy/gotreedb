@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/HelloZhy/gotreedb/resource"
+	"github.com/HelloZhy/gotreedb/internal/resource"
 	"github.com/google/uuid"
 )
 

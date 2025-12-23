@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/HelloZhy/gotreedb/controller"
-	"github.com/HelloZhy/gotreedb/resource"
+	"github.com/HelloZhy/gotreedb/internal/controller"
+	"github.com/HelloZhy/gotreedb/internal/resource"
 )
 
 func startup(
