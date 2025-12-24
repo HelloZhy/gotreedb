@@ -581,9 +581,13 @@ REVERT_POINT:
 const defaultMaxBufferSizeOfNotifierCh uint32 = 16
 const defaultTxTimeoutOfNotifierCh = time.Millisecond * 50
 
-func NewTreeDB() *TreeDB {
+func New() *TreeDB {
 	db := &TreeDB{
-		log:                       slog.Default().With(slog.String("mod", "gotreedb")),
+		log: slog.Default().With(
+			slog.String("mod", "gotreedb"),
+			slog.String("pkg", "db"),
+			slog.String("ext-info", ""),
+		),
 		idToNode:                  map[uint64]*node{},
 		notifierToCh:              map[string]chan<- ReadOpResult{},
 		entryToNotifiers:          map[string]map[string]struct{}{},

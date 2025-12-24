@@ -1,42 +1,17 @@
 package main
 
 import (
-	"context"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 
-	"github.com/HelloZhy/gotreedb/internal/controller"
-	"github.com/HelloZhy/gotreedb/internal/resource"
+	"github.com/HelloZhy/gotreedb/internal/server"
 )
 
-func startup(
-	_resource *resource.Resource,
-	_controller *controller.Controller,
-	mux *http.ServeMux,
-) {
-	_resource.RequestRecorder = resource.NewRequestRecorder()
-
-	_controller.RequestsApi = &controller.RequestsApi{
-		RequestRecorder: _resource.RequestRecorder,
-	}
-
-	_controller.RequestsApi.Register(mux)
-}
-
 func main() {
-	_resource := resource.Resource{}
-	_controller := controller.Controller{}
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	mux := &http.ServeMux{}
-
-	startup(&_resource, &_controller, mux)
-
-	s := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
+	r := server.New()
 
 	sigIntCh := make(chan os.Signal, 1)
 	defer close(sigIntCh)
@@ -44,19 +19,9 @@ func main() {
 	signal.Notify(sigIntCh, os.Interrupt)
 	defer signal.Ignore(os.Interrupt)
 
-	closeCh := make(chan struct{}, 1)
-
-	go func(closeTxCh chan<- struct{}) {
-		defer close(closeTxCh)
-
-		s.ListenAndServe()
-	}(closeCh)
+	r.Start()
 
 	<-sigIntCh
 
-	s.Shutdown(context.Background())
-
-	<-closeCh
-
-	slog.Info(">>> finished")
+	r.StopAndWait()
 }

@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package treedb.v1;
+
+option go_package = ".;apiv1";
+
+message ReadOp {
+    string entry = 1;
+    repeated string keys = 2;
+}
+
+message ReadOpResult {
+    string entry = 1;
+    bool exists = 2;
+    map<string, string> key_to_value = 3;
+}
+
+message ReadBatchReq {
+    repeated ReadOp ops = 1;
+}
+
+message ReadBatchResp {
+    repeated ReadOpResult results = 1;
+}
+
+message WriteActionCreate {
+    string name = 1;
+}
+
+message WriteActionDelete {
+    string name = 1;
+}
+
+message WriteActionUpdate {
+    map<string, string> put_key_to_value = 1;
+    repeated string delete_keys = 2;
+}
+
+message WriteOp {
+    string entry = 1;
+    oneof action {
+        WriteActionCreate create = 2;
+        WriteActionDelete delete = 3;
+        WriteActionUpdate update = 4;
+    }
+}
+
+message WriteBatchReq {
+    repeated WriteOp ops = 1;
+}
+
+message WriteBatchResp {}
+
+message WatchNotifyChReq {
+    string notifier = 1;
+    repeated string entries = 2;
+}
+
+message WatchNotifyChResp {
+    ReadOpResult result = 1;
+}
+
+message CloseNotifyChReq {
+    string notifier = 1;
+}
+
+message CloseNotifyChResp {}
+
+service TreeDB {
+    rpc ReadBatch(ReadBatchReq) returns (ReadBatchResp);
+    rpc WriteBatch(WriteBatchReq) returns (WriteBatchResp);
+    rpc WatchNotifyCh(WatchNotifyChReq) returns (stream WatchNotifyChResp);
+    rpc CloseNotifyCh(CloseNotifyChReq) returns (CloseNotifyChResp);
+}

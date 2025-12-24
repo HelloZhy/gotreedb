@@ -16,7 +16,7 @@ func TestMain(m *testing.M) {
 }
 
 func initTestDB() (*TreeDB, error) {
-	db := NewTreeDB()
+	db := New()
 
 	// / k1: v1
 	// /node1 k1: v1, k2: v2
