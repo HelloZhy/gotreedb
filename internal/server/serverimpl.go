@@ -114,7 +114,7 @@ func (impl *serverImpl) WriteBatch(ctx context.Context, req *apiv1.WriteBatchReq
 }
 
 func (impl *serverImpl) notifyLoop(
-	doneTxCh chan<- struct{},
+	doneTxCh chan<- error,
 	rxCh <-chan db.ReadOpResult,
 	stream grpc.ServerStreamingServer[apiv1.WatchNotifyChResp],
 ) {
@@ -131,9 +131,12 @@ func (impl *serverImpl) notifyLoop(
 
 		if err != nil {
 			impl.log.Error("notifyLoop failed", slog.String("err", err.Error()))
-			break
+			doneTxCh <- err
+			return
 		}
 	}
+
+	doneTxCh <- nil
 }
 
 func (impl *serverImpl) WatchNotifyCh(req *apiv1.WatchNotifyChReq, stream grpc.ServerStreamingServer[apiv1.WatchNotifyChResp]) error {
@@ -155,10 +158,20 @@ func (impl *serverImpl) WatchNotifyCh(req *apiv1.WatchNotifyChReq, stream grpc.S
 		return status.Error(codes.NotFound, internalResp.Err.Error())
 	}
 
-	doneCh := make(chan struct{}, 1)
+	doneCh := make(chan error, 1)
 	go impl.notifyLoop(doneCh, internalResp.RxCh, stream)
 
-	<-doneCh
+	if err := <-doneCh; err != nil {
+		impl.log.Info("WatchNotifyCh loopback CloseNotifyChReq")
+		if _, err := impl.CloseNotifyCh(
+			context.Background(),
+			&apiv1.CloseNotifyChReq{Notifier: req.Notifier},
+		); err != nil {
+			impl.log.Error("WatchNotifyCh loopback CloseNotifyChReq failed", slog.String("err", err.Error()))
+			return status.Error(codes.NotFound, internalResp.Err.Error())
+		}
+		impl.log.Info("WatchNotifyCh loopback CloseNotifyChReq done")
+	}
 
 	impl.log.Info("WatchNotifyCh done")
 
