@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HelloZhy/gotreedb/apiv1"
 	"github.com/HelloZhy/gotreedb/internal/server"
-	"github.com/HelloZhy/gotreedb/pkg/apiv1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

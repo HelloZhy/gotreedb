@@ -3,7 +3,7 @@ package server
 import (
 	"log/slog"
 
-	"github.com/HelloZhy/gotreedb/pkg/db"
+	"github.com/HelloZhy/gotreedb/db"
 )
 
 type handler struct {
