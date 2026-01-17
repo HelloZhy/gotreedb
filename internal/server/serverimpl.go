@@ -51,11 +51,21 @@ func (impl *serverImpl) ReadBatch(ctx context.Context, req *apiv1.ReadBatchReq) 
 
 	results := make([]*apiv1.ReadOpResult, 0, len(internalResp.Results))
 	for _, result := range internalResp.Results {
-		results = append(results, &apiv1.ReadOpResult{
-			Entry:      result.Entry,
-			Exists:     result.Exists,
-			KeyToValue: maps.Clone(result.KeyToValue),
-		})
+		apiResult := &apiv1.ReadOpResult{
+			Exists:            result.Exists,
+			EntryResult:       &apiv1.ReadOpEntryResult{},
+			ChildEntryResults: make([]*apiv1.ReadOpEntryResult, len(result.ChildEntryResults)),
+		}
+
+		apiResult.EntryResult.Entry = result.EntryResult.Entry
+		apiResult.EntryResult.KeyToValue = result.EntryResult.KeyToValue
+
+		for i, entryResult := range result.ChildEntryResults {
+			apiResult.ChildEntryResults[i].Entry = entryResult.Entry
+			apiResult.ChildEntryResults[i].KeyToValue = maps.Clone(entryResult.KeyToValue)
+		}
+
+		results = append(results, apiResult)
 	}
 
 	resp := &apiv1.ReadBatchResp{
@@ -115,18 +125,16 @@ func (impl *serverImpl) WriteBatch(ctx context.Context, req *apiv1.WriteBatchReq
 
 func (impl *serverImpl) notifyLoop(
 	doneTxCh chan<- error,
-	rxCh <-chan db.ReadOpResult,
+	rxCh <-chan db.NotifyChResult,
 	stream grpc.ServerStreamingServer[apiv1.WatchNotifyChResp],
 ) {
 	defer close(doneTxCh)
 
 	for result := range rxCh {
 		err := stream.Send(&apiv1.WatchNotifyChResp{
-			Result: &apiv1.ReadOpResult{
-				Entry:      result.Entry,
-				Exists:     result.Exists,
-				KeyToValue: maps.Clone(result.KeyToValue),
-			},
+			Entry:      result.Entry,
+			Exists:     result.Exists,
+			KeyToValue: maps.Clone(result.KeyToValue),
 		})
 
 		if err != nil {

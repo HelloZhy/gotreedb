@@ -1,6 +1,7 @@
 package db
 
 import (
+	"container/list"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -27,14 +28,20 @@ func (n *node) clone() *node {
 }
 
 type ReadOp struct {
-	Entry string
-	Keys  []string
+	Entry            string
+	SearchChildNodes bool
+	Keys             []string
+}
+
+type ReadOpEntryResult struct {
+	Entry      string
+	KeyToValue map[string]string
 }
 
 type ReadOpResult struct {
-	Entry      string
-	Exists     bool
-	KeyToValue map[string]string
+	Exists            bool
+	EntryResult       ReadOpEntryResult
+	ChildEntryResults []ReadOpEntryResult
 }
 
 type WriteOp struct {
@@ -57,11 +64,17 @@ type WriteActionUpdate struct {
 	DeleteKeys    []string
 }
 
+type NotifyChResult struct {
+	Entry      string
+	Exists     bool
+	KeyToValue map[string]string
+}
+
 type TreeDB struct {
 	log                       *slog.Logger
 	nextId                    uint64
 	idToNode                  map[uint64]*node
-	notifierToCh              map[string]chan<- ReadOpResult
+	notifierToCh              map[string]chan<- NotifyChResult
 	entryToNotifiers          map[string]map[string]struct{}
 	maxBufferSizeOfNotifierCh uint32
 	txTimeoutOfNotifierCh     time.Duration
@@ -74,7 +87,7 @@ func (db *TreeDB) validateNotifier(notifier string) bool {
 	return validateStrOnlyContainWords(notifier)
 }
 
-func (db *TreeDB) RegisterNotifier(notifier string, entries []string) (ch <-chan ReadOpResult, err error) {
+func (db *TreeDB) RegisterNotifier(notifier string, entries []string) (ch <-chan NotifyChResult, err error) {
 	db.log.Info("RegisterNotifier")
 	db.log.Debug("RegisterNotifier args", slog.String("notifier", notifier), slog.Any("entries", entries))
 
@@ -98,7 +111,7 @@ func (db *TreeDB) RegisterNotifier(notifier string, entries []string) (ch <-chan
 		return
 	}
 
-	newCh := make(chan ReadOpResult, db.maxBufferSizeOfNotifierCh)
+	newCh := make(chan NotifyChResult, db.maxBufferSizeOfNotifierCh)
 
 	db.notifierToCh[notifier] = newCh
 	ch = newCh
@@ -117,7 +130,7 @@ func (db *TreeDB) RegisterNotifier(notifier string, entries []string) (ch <-chan
 		}
 		notifiers[notifier] = struct{}{}
 
-		ops = append(ops, ReadOp{Entry: entry, Keys: nil})
+		ops = append(ops, ReadOp{Entry: entry, SearchChildNodes: false, Keys: nil})
 	}
 
 	db.readBatchAndNotify(ops)
@@ -236,6 +249,77 @@ func (db *TreeDB) newNode(name string) *node {
 
 var errEntryNotExists = errors.New("entry not exists in db")
 
+func (db *TreeDB) readKeys(_node *node, keys []string) map[string]string {
+	if len(keys) > 0 {
+		keyToValue := make(map[string]string)
+		for _, key := range keys {
+			if value, ok := _node.keyToValue[key]; ok {
+				keyToValue[key] = value
+			}
+		}
+		return keyToValue
+	} else {
+		return maps.Clone(_node.keyToValue)
+	}
+}
+
+func (db *TreeDB) buildChildEntryResults(entry string, keys []string, _node *node) (result []ReadOpEntryResult) {
+	type nodeWithEntry struct {
+		entryPrefix string
+		_node       *node
+	}
+
+	q := list.List{}
+	for nodeName, childNodeId := range _node.nameToIds {
+		childNode, ok := db.idToNode[childNodeId]
+		if !ok {
+			panic(fmt.Sprintf("nodeName: %s exists, but childNodeId: %d not found in db.idToNode, db broken", nodeName, childNodeId))
+		}
+		q.PushBack(
+			&nodeWithEntry{
+				entryPrefix: entry,
+				_node:       childNode,
+			},
+		)
+	}
+
+	for q.Len() > 0 {
+		ele := q.Front()
+		curNodeWithEntry := ele.Value.(*nodeWithEntry)
+		curNodeEntry := db.concatEntryAndName(
+			curNodeWithEntry.entryPrefix,
+			curNodeWithEntry._node.name,
+		)
+		result = append(
+			result,
+			ReadOpEntryResult{
+				Entry: curNodeEntry,
+				KeyToValue: db.readKeys(
+					curNodeWithEntry._node,
+					keys,
+				),
+			},
+		)
+
+		for nodeName, childNodeId := range curNodeWithEntry._node.nameToIds {
+			childNode, ok := db.idToNode[childNodeId]
+			if !ok {
+				panic(fmt.Sprintf("nodeName: %s exists, but childNodeId: %d not found in db.idToNode, db broken", nodeName, childNodeId))
+			}
+			q.PushBack(
+				&nodeWithEntry{
+					entryPrefix: curNodeEntry,
+					_node:       childNode,
+				},
+			)
+		}
+
+		q.Remove(ele)
+	}
+
+	return
+}
+
 func (db *TreeDB) ReadBatch(ops ...ReadOp) (results []ReadOpResult, err error) {
 	db.log.Info("ReadBatch")
 	db.log.Debug("ReadBatch args", slog.Any("ops", ops))
@@ -254,22 +338,15 @@ func (db *TreeDB) ReadBatch(ops ...ReadOp) (results []ReadOpResult, err error) {
 		db.log.Debug("ReadOp", slog.Any("op", op))
 
 		opResult := ReadOpResult{
-			Entry:      op.Entry,
-			Exists:     false,
-			KeyToValue: map[string]string{},
+			EntryResult: ReadOpEntryResult{Entry: op.Entry},
 		}
 
 		if _node := db.findNode(op.Entry); _node != nil {
 			opResult.Exists = true
+			opResult.EntryResult.KeyToValue = db.readKeys(_node, op.Keys)
 
-			if len(op.Keys) > 0 {
-				for _, key := range op.Keys {
-					if value, ok := _node.keyToValue[key]; ok {
-						opResult.KeyToValue[key] = value
-					}
-				}
-			} else {
-				opResult.KeyToValue = maps.Clone(_node.keyToValue)
+			if op.SearchChildNodes {
+				opResult.ChildEntryResults = db.buildChildEntryResults(op.Entry, op.Keys, _node)
 			}
 		}
 
@@ -397,10 +474,16 @@ func (db *TreeDB) readBatchAndNotify(ops []ReadOp) {
 	}
 
 	for _, result := range results {
-		for notifier := range db.entryToNotifiers[result.Entry] {
+		notifyChResult := NotifyChResult{
+			Entry:      result.EntryResult.Entry,
+			Exists:     result.Exists,
+			KeyToValue: result.EntryResult.KeyToValue,
+		}
+
+		for notifier := range db.entryToNotifiers[result.EntryResult.Entry] {
 			ch := db.notifierToCh[notifier]
 			select {
-			case ch <- result:
+			case ch <- notifyChResult:
 			case <-time.After(db.txTimeoutOfNotifierCh):
 				db.log.Error(
 					"channel write failed, maybe full?",
@@ -589,7 +672,7 @@ func New() *TreeDB {
 			slog.String("ext-info", ""),
 		),
 		idToNode:                  map[uint64]*node{},
-		notifierToCh:              map[string]chan<- ReadOpResult{},
+		notifierToCh:              map[string]chan<- NotifyChResult{},
 		entryToNotifiers:          map[string]map[string]struct{}{},
 		maxBufferSizeOfNotifierCh: defaultMaxBufferSizeOfNotifierCh,
 		txTimeoutOfNotifierCh:     defaultTxTimeoutOfNotifierCh,

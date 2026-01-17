@@ -22,11 +22,12 @@ const (
 )
 
 type ReadOp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entry         string                 `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
-	Keys          []string               `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Entry            string                 `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	SearchChildNodes bool                   `protobuf:"varint,2,opt,name=search_child_nodes,json=searchChildNodes,proto3" json:"search_child_nodes,omitempty"`
+	Keys             []string               `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ReadOp) Reset() {
@@ -66,6 +67,13 @@ func (x *ReadOp) GetEntry() string {
 	return ""
 }
 
+func (x *ReadOp) GetSearchChildNodes() bool {
+	if x != nil {
+		return x.SearchChildNodes
+	}
+	return false
+}
+
 func (x *ReadOp) GetKeys() []string {
 	if x != nil {
 		return x.Keys
@@ -73,18 +81,70 @@ func (x *ReadOp) GetKeys() []string {
 	return nil
 }
 
-type ReadOpResult struct {
+type ReadOpEntryResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Entry         string                 `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
-	Exists        bool                   `protobuf:"varint,2,opt,name=exists,proto3" json:"exists,omitempty"`
 	KeyToValue    map[string]string      `protobuf:"bytes,3,rep,name=key_to_value,json=keyToValue,proto3" json:"key_to_value,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *ReadOpEntryResult) Reset() {
+	*x = ReadOpEntryResult{}
+	mi := &file_treedb_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadOpEntryResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadOpEntryResult) ProtoMessage() {}
+
+func (x *ReadOpEntryResult) ProtoReflect() protoreflect.Message {
+	mi := &file_treedb_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadOpEntryResult.ProtoReflect.Descriptor instead.
+func (*ReadOpEntryResult) Descriptor() ([]byte, []int) {
+	return file_treedb_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ReadOpEntryResult) GetEntry() string {
+	if x != nil {
+		return x.Entry
+	}
+	return ""
+}
+
+func (x *ReadOpEntryResult) GetKeyToValue() map[string]string {
+	if x != nil {
+		return x.KeyToValue
+	}
+	return nil
+}
+
+type ReadOpResult struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Exists            bool                   `protobuf:"varint,1,opt,name=exists,proto3" json:"exists,omitempty"`
+	EntryResult       *ReadOpEntryResult     `protobuf:"bytes,2,opt,name=entry_result,json=entryResult,proto3" json:"entry_result,omitempty"`
+	ChildEntryResults []*ReadOpEntryResult   `protobuf:"bytes,3,rep,name=child_entry_results,json=childEntryResults,proto3" json:"child_entry_results,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
 func (x *ReadOpResult) Reset() {
 	*x = ReadOpResult{}
-	mi := &file_treedb_proto_msgTypes[1]
+	mi := &file_treedb_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -96,7 +156,7 @@ func (x *ReadOpResult) String() string {
 func (*ReadOpResult) ProtoMessage() {}
 
 func (x *ReadOpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[1]
+	mi := &file_treedb_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,14 +169,7 @@ func (x *ReadOpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadOpResult.ProtoReflect.Descriptor instead.
 func (*ReadOpResult) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ReadOpResult) GetEntry() string {
-	if x != nil {
-		return x.Entry
-	}
-	return ""
+	return file_treedb_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ReadOpResult) GetExists() bool {
@@ -126,9 +179,16 @@ func (x *ReadOpResult) GetExists() bool {
 	return false
 }
 
-func (x *ReadOpResult) GetKeyToValue() map[string]string {
+func (x *ReadOpResult) GetEntryResult() *ReadOpEntryResult {
 	if x != nil {
-		return x.KeyToValue
+		return x.EntryResult
+	}
+	return nil
+}
+
+func (x *ReadOpResult) GetChildEntryResults() []*ReadOpEntryResult {
+	if x != nil {
+		return x.ChildEntryResults
 	}
 	return nil
 }
@@ -142,7 +202,7 @@ type ReadBatchReq struct {
 
 func (x *ReadBatchReq) Reset() {
 	*x = ReadBatchReq{}
-	mi := &file_treedb_proto_msgTypes[2]
+	mi := &file_treedb_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +214,7 @@ func (x *ReadBatchReq) String() string {
 func (*ReadBatchReq) ProtoMessage() {}
 
 func (x *ReadBatchReq) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[2]
+	mi := &file_treedb_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +227,7 @@ func (x *ReadBatchReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadBatchReq.ProtoReflect.Descriptor instead.
 func (*ReadBatchReq) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{2}
+	return file_treedb_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ReadBatchReq) GetOps() []*ReadOp {
@@ -186,7 +246,7 @@ type ReadBatchResp struct {
 
 func (x *ReadBatchResp) Reset() {
 	*x = ReadBatchResp{}
-	mi := &file_treedb_proto_msgTypes[3]
+	mi := &file_treedb_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -198,7 +258,7 @@ func (x *ReadBatchResp) String() string {
 func (*ReadBatchResp) ProtoMessage() {}
 
 func (x *ReadBatchResp) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[3]
+	mi := &file_treedb_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -211,7 +271,7 @@ func (x *ReadBatchResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadBatchResp.ProtoReflect.Descriptor instead.
 func (*ReadBatchResp) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{3}
+	return file_treedb_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReadBatchResp) GetResults() []*ReadOpResult {
@@ -230,7 +290,7 @@ type WriteActionCreate struct {
 
 func (x *WriteActionCreate) Reset() {
 	*x = WriteActionCreate{}
-	mi := &file_treedb_proto_msgTypes[4]
+	mi := &file_treedb_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -242,7 +302,7 @@ func (x *WriteActionCreate) String() string {
 func (*WriteActionCreate) ProtoMessage() {}
 
 func (x *WriteActionCreate) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[4]
+	mi := &file_treedb_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -255,7 +315,7 @@ func (x *WriteActionCreate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteActionCreate.ProtoReflect.Descriptor instead.
 func (*WriteActionCreate) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{4}
+	return file_treedb_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WriteActionCreate) GetName() string {
@@ -274,7 +334,7 @@ type WriteActionDelete struct {
 
 func (x *WriteActionDelete) Reset() {
 	*x = WriteActionDelete{}
-	mi := &file_treedb_proto_msgTypes[5]
+	mi := &file_treedb_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +346,7 @@ func (x *WriteActionDelete) String() string {
 func (*WriteActionDelete) ProtoMessage() {}
 
 func (x *WriteActionDelete) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[5]
+	mi := &file_treedb_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +359,7 @@ func (x *WriteActionDelete) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteActionDelete.ProtoReflect.Descriptor instead.
 func (*WriteActionDelete) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{5}
+	return file_treedb_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WriteActionDelete) GetName() string {
@@ -319,7 +379,7 @@ type WriteActionUpdate struct {
 
 func (x *WriteActionUpdate) Reset() {
 	*x = WriteActionUpdate{}
-	mi := &file_treedb_proto_msgTypes[6]
+	mi := &file_treedb_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -331,7 +391,7 @@ func (x *WriteActionUpdate) String() string {
 func (*WriteActionUpdate) ProtoMessage() {}
 
 func (x *WriteActionUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[6]
+	mi := &file_treedb_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -344,7 +404,7 @@ func (x *WriteActionUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteActionUpdate.ProtoReflect.Descriptor instead.
 func (*WriteActionUpdate) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{6}
+	return file_treedb_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *WriteActionUpdate) GetPutKeyToValue() map[string]string {
@@ -376,7 +436,7 @@ type WriteOp struct {
 
 func (x *WriteOp) Reset() {
 	*x = WriteOp{}
-	mi := &file_treedb_proto_msgTypes[7]
+	mi := &file_treedb_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -388,7 +448,7 @@ func (x *WriteOp) String() string {
 func (*WriteOp) ProtoMessage() {}
 
 func (x *WriteOp) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[7]
+	mi := &file_treedb_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -401,7 +461,7 @@ func (x *WriteOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteOp.ProtoReflect.Descriptor instead.
 func (*WriteOp) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{7}
+	return file_treedb_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WriteOp) GetEntry() string {
@@ -476,7 +536,7 @@ type WriteBatchReq struct {
 
 func (x *WriteBatchReq) Reset() {
 	*x = WriteBatchReq{}
-	mi := &file_treedb_proto_msgTypes[8]
+	mi := &file_treedb_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -488,7 +548,7 @@ func (x *WriteBatchReq) String() string {
 func (*WriteBatchReq) ProtoMessage() {}
 
 func (x *WriteBatchReq) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[8]
+	mi := &file_treedb_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -501,7 +561,7 @@ func (x *WriteBatchReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteBatchReq.ProtoReflect.Descriptor instead.
 func (*WriteBatchReq) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{8}
+	return file_treedb_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WriteBatchReq) GetOps() []*WriteOp {
@@ -519,7 +579,7 @@ type WriteBatchResp struct {
 
 func (x *WriteBatchResp) Reset() {
 	*x = WriteBatchResp{}
-	mi := &file_treedb_proto_msgTypes[9]
+	mi := &file_treedb_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +591,7 @@ func (x *WriteBatchResp) String() string {
 func (*WriteBatchResp) ProtoMessage() {}
 
 func (x *WriteBatchResp) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[9]
+	mi := &file_treedb_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +604,7 @@ func (x *WriteBatchResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteBatchResp.ProtoReflect.Descriptor instead.
 func (*WriteBatchResp) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{9}
+	return file_treedb_proto_rawDescGZIP(), []int{10}
 }
 
 type WatchNotifyChReq struct {
@@ -557,7 +617,7 @@ type WatchNotifyChReq struct {
 
 func (x *WatchNotifyChReq) Reset() {
 	*x = WatchNotifyChReq{}
-	mi := &file_treedb_proto_msgTypes[10]
+	mi := &file_treedb_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -569,7 +629,7 @@ func (x *WatchNotifyChReq) String() string {
 func (*WatchNotifyChReq) ProtoMessage() {}
 
 func (x *WatchNotifyChReq) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[10]
+	mi := &file_treedb_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -582,7 +642,7 @@ func (x *WatchNotifyChReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchNotifyChReq.ProtoReflect.Descriptor instead.
 func (*WatchNotifyChReq) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{10}
+	return file_treedb_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *WatchNotifyChReq) GetNotifier() string {
@@ -601,14 +661,16 @@ func (x *WatchNotifyChReq) GetEntries() []string {
 
 type WatchNotifyChResp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Result        *ReadOpResult          `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	Entry         string                 `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	Exists        bool                   `protobuf:"varint,2,opt,name=exists,proto3" json:"exists,omitempty"`
+	KeyToValue    map[string]string      `protobuf:"bytes,3,rep,name=key_to_value,json=keyToValue,proto3" json:"key_to_value,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WatchNotifyChResp) Reset() {
 	*x = WatchNotifyChResp{}
-	mi := &file_treedb_proto_msgTypes[11]
+	mi := &file_treedb_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +682,7 @@ func (x *WatchNotifyChResp) String() string {
 func (*WatchNotifyChResp) ProtoMessage() {}
 
 func (x *WatchNotifyChResp) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[11]
+	mi := &file_treedb_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,12 +695,26 @@ func (x *WatchNotifyChResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchNotifyChResp.ProtoReflect.Descriptor instead.
 func (*WatchNotifyChResp) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{11}
+	return file_treedb_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *WatchNotifyChResp) GetResult() *ReadOpResult {
+func (x *WatchNotifyChResp) GetEntry() string {
 	if x != nil {
-		return x.Result
+		return x.Entry
+	}
+	return ""
+}
+
+func (x *WatchNotifyChResp) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
+}
+
+func (x *WatchNotifyChResp) GetKeyToValue() map[string]string {
+	if x != nil {
+		return x.KeyToValue
 	}
 	return nil
 }
@@ -652,7 +728,7 @@ type CloseNotifyChReq struct {
 
 func (x *CloseNotifyChReq) Reset() {
 	*x = CloseNotifyChReq{}
-	mi := &file_treedb_proto_msgTypes[12]
+	mi := &file_treedb_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -664,7 +740,7 @@ func (x *CloseNotifyChReq) String() string {
 func (*CloseNotifyChReq) ProtoMessage() {}
 
 func (x *CloseNotifyChReq) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[12]
+	mi := &file_treedb_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -677,7 +753,7 @@ func (x *CloseNotifyChReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseNotifyChReq.ProtoReflect.Descriptor instead.
 func (*CloseNotifyChReq) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{12}
+	return file_treedb_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CloseNotifyChReq) GetNotifier() string {
@@ -695,7 +771,7 @@ type CloseNotifyChResp struct {
 
 func (x *CloseNotifyChResp) Reset() {
 	*x = CloseNotifyChResp{}
-	mi := &file_treedb_proto_msgTypes[13]
+	mi := &file_treedb_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -707,7 +783,7 @@ func (x *CloseNotifyChResp) String() string {
 func (*CloseNotifyChResp) ProtoMessage() {}
 
 func (x *CloseNotifyChResp) ProtoReflect() protoreflect.Message {
-	mi := &file_treedb_proto_msgTypes[13]
+	mi := &file_treedb_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -720,25 +796,29 @@ func (x *CloseNotifyChResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseNotifyChResp.ProtoReflect.Descriptor instead.
 func (*CloseNotifyChResp) Descriptor() ([]byte, []int) {
-	return file_treedb_proto_rawDescGZIP(), []int{13}
+	return file_treedb_proto_rawDescGZIP(), []int{14}
 }
 
 var File_treedb_proto protoreflect.FileDescriptor
 
 const file_treedb_proto_rawDesc = "" +
 	"\n" +
-	"\ftreedb.proto\x12\ttreedb.v1\"2\n" +
+	"\ftreedb.proto\x12\ttreedb.v1\"`\n" +
 	"\x06ReadOp\x12\x14\n" +
-	"\x05entry\x18\x01 \x01(\tR\x05entry\x12\x12\n" +
-	"\x04keys\x18\x02 \x03(\tR\x04keys\"\xc6\x01\n" +
-	"\fReadOpResult\x12\x14\n" +
-	"\x05entry\x18\x01 \x01(\tR\x05entry\x12\x16\n" +
-	"\x06exists\x18\x02 \x01(\bR\x06exists\x12I\n" +
-	"\fkey_to_value\x18\x03 \x03(\v2'.treedb.v1.ReadOpResult.KeyToValueEntryR\n" +
+	"\x05entry\x18\x01 \x01(\tR\x05entry\x12,\n" +
+	"\x12search_child_nodes\x18\x02 \x01(\bR\x10searchChildNodes\x12\x12\n" +
+	"\x04keys\x18\x03 \x03(\tR\x04keys\"\xb8\x01\n" +
+	"\x11ReadOpEntryResult\x12\x14\n" +
+	"\x05entry\x18\x01 \x01(\tR\x05entry\x12N\n" +
+	"\fkey_to_value\x18\x03 \x03(\v2,.treedb.v1.ReadOpEntryResult.KeyToValueEntryR\n" +
 	"keyToValue\x1a=\n" +
 	"\x0fKeyToValueEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"3\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb5\x01\n" +
+	"\fReadOpResult\x12\x16\n" +
+	"\x06exists\x18\x01 \x01(\bR\x06exists\x12?\n" +
+	"\fentry_result\x18\x02 \x01(\v2\x1c.treedb.v1.ReadOpEntryResultR\ventryResult\x12L\n" +
+	"\x13child_entry_results\x18\x03 \x03(\v2\x1c.treedb.v1.ReadOpEntryResultR\x11childEntryResults\"3\n" +
 	"\fReadBatchReq\x12#\n" +
 	"\x03ops\x18\x01 \x03(\v2\x11.treedb.v1.ReadOpR\x03ops\"B\n" +
 	"\rReadBatchResp\x121\n" +
@@ -765,9 +845,15 @@ const file_treedb_proto_rawDesc = "" +
 	"\x0eWriteBatchResp\"H\n" +
 	"\x10WatchNotifyChReq\x12\x1a\n" +
 	"\bnotifier\x18\x01 \x01(\tR\bnotifier\x12\x18\n" +
-	"\aentries\x18\x02 \x03(\tR\aentries\"D\n" +
-	"\x11WatchNotifyChResp\x12/\n" +
-	"\x06result\x18\x01 \x01(\v2\x17.treedb.v1.ReadOpResultR\x06result\".\n" +
+	"\aentries\x18\x02 \x03(\tR\aentries\"\xd0\x01\n" +
+	"\x11WatchNotifyChResp\x12\x14\n" +
+	"\x05entry\x18\x01 \x01(\tR\x05entry\x12\x16\n" +
+	"\x06exists\x18\x02 \x01(\bR\x06exists\x12N\n" +
+	"\fkey_to_value\x18\x03 \x03(\v2,.treedb.v1.WatchNotifyChResp.KeyToValueEntryR\n" +
+	"keyToValue\x1a=\n" +
+	"\x0fKeyToValueEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\".\n" +
 	"\x10CloseNotifyChReq\x12\x1a\n" +
 	"\bnotifier\x18\x01 \x01(\tR\bnotifier\"\x13\n" +
 	"\x11CloseNotifyChResp2\xa5\x02\n" +
@@ -790,48 +876,52 @@ func file_treedb_proto_rawDescGZIP() []byte {
 	return file_treedb_proto_rawDescData
 }
 
-var file_treedb_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_treedb_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_treedb_proto_goTypes = []any{
 	(*ReadOp)(nil),            // 0: treedb.v1.ReadOp
-	(*ReadOpResult)(nil),      // 1: treedb.v1.ReadOpResult
-	(*ReadBatchReq)(nil),      // 2: treedb.v1.ReadBatchReq
-	(*ReadBatchResp)(nil),     // 3: treedb.v1.ReadBatchResp
-	(*WriteActionCreate)(nil), // 4: treedb.v1.WriteActionCreate
-	(*WriteActionDelete)(nil), // 5: treedb.v1.WriteActionDelete
-	(*WriteActionUpdate)(nil), // 6: treedb.v1.WriteActionUpdate
-	(*WriteOp)(nil),           // 7: treedb.v1.WriteOp
-	(*WriteBatchReq)(nil),     // 8: treedb.v1.WriteBatchReq
-	(*WriteBatchResp)(nil),    // 9: treedb.v1.WriteBatchResp
-	(*WatchNotifyChReq)(nil),  // 10: treedb.v1.WatchNotifyChReq
-	(*WatchNotifyChResp)(nil), // 11: treedb.v1.WatchNotifyChResp
-	(*CloseNotifyChReq)(nil),  // 12: treedb.v1.CloseNotifyChReq
-	(*CloseNotifyChResp)(nil), // 13: treedb.v1.CloseNotifyChResp
-	nil,                       // 14: treedb.v1.ReadOpResult.KeyToValueEntry
-	nil,                       // 15: treedb.v1.WriteActionUpdate.PutKeyToValueEntry
+	(*ReadOpEntryResult)(nil), // 1: treedb.v1.ReadOpEntryResult
+	(*ReadOpResult)(nil),      // 2: treedb.v1.ReadOpResult
+	(*ReadBatchReq)(nil),      // 3: treedb.v1.ReadBatchReq
+	(*ReadBatchResp)(nil),     // 4: treedb.v1.ReadBatchResp
+	(*WriteActionCreate)(nil), // 5: treedb.v1.WriteActionCreate
+	(*WriteActionDelete)(nil), // 6: treedb.v1.WriteActionDelete
+	(*WriteActionUpdate)(nil), // 7: treedb.v1.WriteActionUpdate
+	(*WriteOp)(nil),           // 8: treedb.v1.WriteOp
+	(*WriteBatchReq)(nil),     // 9: treedb.v1.WriteBatchReq
+	(*WriteBatchResp)(nil),    // 10: treedb.v1.WriteBatchResp
+	(*WatchNotifyChReq)(nil),  // 11: treedb.v1.WatchNotifyChReq
+	(*WatchNotifyChResp)(nil), // 12: treedb.v1.WatchNotifyChResp
+	(*CloseNotifyChReq)(nil),  // 13: treedb.v1.CloseNotifyChReq
+	(*CloseNotifyChResp)(nil), // 14: treedb.v1.CloseNotifyChResp
+	nil,                       // 15: treedb.v1.ReadOpEntryResult.KeyToValueEntry
+	nil,                       // 16: treedb.v1.WriteActionUpdate.PutKeyToValueEntry
+	nil,                       // 17: treedb.v1.WatchNotifyChResp.KeyToValueEntry
 }
 var file_treedb_proto_depIdxs = []int32{
-	14, // 0: treedb.v1.ReadOpResult.key_to_value:type_name -> treedb.v1.ReadOpResult.KeyToValueEntry
-	0,  // 1: treedb.v1.ReadBatchReq.ops:type_name -> treedb.v1.ReadOp
-	1,  // 2: treedb.v1.ReadBatchResp.results:type_name -> treedb.v1.ReadOpResult
-	15, // 3: treedb.v1.WriteActionUpdate.put_key_to_value:type_name -> treedb.v1.WriteActionUpdate.PutKeyToValueEntry
-	4,  // 4: treedb.v1.WriteOp.create:type_name -> treedb.v1.WriteActionCreate
-	5,  // 5: treedb.v1.WriteOp.delete:type_name -> treedb.v1.WriteActionDelete
-	6,  // 6: treedb.v1.WriteOp.update:type_name -> treedb.v1.WriteActionUpdate
-	7,  // 7: treedb.v1.WriteBatchReq.ops:type_name -> treedb.v1.WriteOp
-	1,  // 8: treedb.v1.WatchNotifyChResp.result:type_name -> treedb.v1.ReadOpResult
-	2,  // 9: treedb.v1.TreeDB.ReadBatch:input_type -> treedb.v1.ReadBatchReq
-	8,  // 10: treedb.v1.TreeDB.WriteBatch:input_type -> treedb.v1.WriteBatchReq
-	10, // 11: treedb.v1.TreeDB.WatchNotifyCh:input_type -> treedb.v1.WatchNotifyChReq
-	12, // 12: treedb.v1.TreeDB.CloseNotifyCh:input_type -> treedb.v1.CloseNotifyChReq
-	3,  // 13: treedb.v1.TreeDB.ReadBatch:output_type -> treedb.v1.ReadBatchResp
-	9,  // 14: treedb.v1.TreeDB.WriteBatch:output_type -> treedb.v1.WriteBatchResp
-	11, // 15: treedb.v1.TreeDB.WatchNotifyCh:output_type -> treedb.v1.WatchNotifyChResp
-	13, // 16: treedb.v1.TreeDB.CloseNotifyCh:output_type -> treedb.v1.CloseNotifyChResp
-	13, // [13:17] is the sub-list for method output_type
-	9,  // [9:13] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	15, // 0: treedb.v1.ReadOpEntryResult.key_to_value:type_name -> treedb.v1.ReadOpEntryResult.KeyToValueEntry
+	1,  // 1: treedb.v1.ReadOpResult.entry_result:type_name -> treedb.v1.ReadOpEntryResult
+	1,  // 2: treedb.v1.ReadOpResult.child_entry_results:type_name -> treedb.v1.ReadOpEntryResult
+	0,  // 3: treedb.v1.ReadBatchReq.ops:type_name -> treedb.v1.ReadOp
+	2,  // 4: treedb.v1.ReadBatchResp.results:type_name -> treedb.v1.ReadOpResult
+	16, // 5: treedb.v1.WriteActionUpdate.put_key_to_value:type_name -> treedb.v1.WriteActionUpdate.PutKeyToValueEntry
+	5,  // 6: treedb.v1.WriteOp.create:type_name -> treedb.v1.WriteActionCreate
+	6,  // 7: treedb.v1.WriteOp.delete:type_name -> treedb.v1.WriteActionDelete
+	7,  // 8: treedb.v1.WriteOp.update:type_name -> treedb.v1.WriteActionUpdate
+	8,  // 9: treedb.v1.WriteBatchReq.ops:type_name -> treedb.v1.WriteOp
+	17, // 10: treedb.v1.WatchNotifyChResp.key_to_value:type_name -> treedb.v1.WatchNotifyChResp.KeyToValueEntry
+	3,  // 11: treedb.v1.TreeDB.ReadBatch:input_type -> treedb.v1.ReadBatchReq
+	9,  // 12: treedb.v1.TreeDB.WriteBatch:input_type -> treedb.v1.WriteBatchReq
+	11, // 13: treedb.v1.TreeDB.WatchNotifyCh:input_type -> treedb.v1.WatchNotifyChReq
+	13, // 14: treedb.v1.TreeDB.CloseNotifyCh:input_type -> treedb.v1.CloseNotifyChReq
+	4,  // 15: treedb.v1.TreeDB.ReadBatch:output_type -> treedb.v1.ReadBatchResp
+	10, // 16: treedb.v1.TreeDB.WriteBatch:output_type -> treedb.v1.WriteBatchResp
+	12, // 17: treedb.v1.TreeDB.WatchNotifyCh:output_type -> treedb.v1.WatchNotifyChResp
+	14, // 18: treedb.v1.TreeDB.CloseNotifyCh:output_type -> treedb.v1.CloseNotifyChResp
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_treedb_proto_init() }
@@ -839,7 +929,7 @@ func file_treedb_proto_init() {
 	if File_treedb_proto != nil {
 		return
 	}
-	file_treedb_proto_msgTypes[7].OneofWrappers = []any{
+	file_treedb_proto_msgTypes[8].OneofWrappers = []any{
 		(*WriteOp_Create)(nil),
 		(*WriteOp_Delete)(nil),
 		(*WriteOp_Update)(nil),
@@ -850,7 +940,7 @@ func file_treedb_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_treedb_proto_rawDesc), len(file_treedb_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

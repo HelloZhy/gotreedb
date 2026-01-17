@@ -195,6 +195,18 @@ func TestReadBatchSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%+v", results)
+
+	results, err = db.ReadBatch(
+		ReadOp{
+			Entry:            "/node2",
+			SearchChildNodes: true,
+			Keys:             []string{"k1"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%+v", results)
 }
 
 func TestReadBatchFailed(t *testing.T) {

@@ -34,7 +34,7 @@ type writeBatchReq struct {
 }
 
 type registerResp struct {
-	RxCh <-chan db.ReadOpResult
+	RxCh <-chan db.NotifyChResult
 	Err  error
 }
 
