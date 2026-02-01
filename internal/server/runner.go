@@ -5,8 +5,8 @@ import (
 	"net"
 	"os"
 
-	"github.com/HelloZhy/gotreedb/apiv1"
 	"github.com/HelloZhy/gotreedb/db"
+	"github.com/HelloZhy/gotreedb/internal/apiv1"
 	"google.golang.org/grpc"
 )
 

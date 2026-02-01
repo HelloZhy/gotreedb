@@ -6,8 +6,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/HelloZhy/gotreedb/apiv1"
 	"github.com/HelloZhy/gotreedb/db"
+	"github.com/HelloZhy/gotreedb/internal/apiv1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
